@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -43,6 +45,27 @@ func main() {
 		SetBorders(false).
 		SetSelectable(true, false) // Cho phép dùng phím mũi tên lên/xuống để chọn dòng
 	procTable.SetBorder(true).SetTitle(" ⚙️ Top Processes (RAM) ").SetTitleColor(tcell.ColorCadetBlue)
+
+	// Xử lý sự kiện khi nhấn Enter trên một dòng
+	procTable.SetSelectedFunc(func(row int, column int) {
+		// Bỏ qua dòng tiêu đề
+		if row == 0 {
+			return
+		}
+		pidStr := procTable.GetCell(row, 0).Text
+		pid, err := strconv.Atoi(pidStr)
+		if err != nil {
+			// Bỏ qua nếu không phải là số
+			return
+		}
+
+		// Lệnh cho macOS để mở cửa sổ Terminal mới và chạy 'witr'
+		cmdString := fmt.Sprintf("tell app \"Terminal\" to do script \"witr --pid %d\"", pid)
+		cmd := exec.Command("osascript", "-e", cmdString)
+
+		// Thực thi lệnh mà không chờ (fire-and-forget)
+		_ = cmd.Start()
+	})
 
 	// 4. Sắp xếp Layout (Chia theo hàng dọc)
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).

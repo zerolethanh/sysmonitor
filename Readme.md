@@ -2,6 +2,8 @@
 
 A terminal-based system monitoring tool written in Go.
 
+![Screenshot of the project](screenshots/1.webp)
+
 ## Description
 
 This tool provides a real-time view of your system's CPU usage, memory consumption, network activity, running processes, and network connections. It's built using `tview` for the terminal user interface and `gopsutil` for data collection.

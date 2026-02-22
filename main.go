@@ -23,6 +23,15 @@ type ProcessInfo struct {
 	Mem  float32
 }
 
+// ConnInfo holds information about a network connection.
+type ConnInfo struct {
+	PID         int32
+	ProcessName string
+	LocalAddr   string
+	RemoteAddr  string
+	Status      string
+}
+
 func main() {
 	// Khởi tạo biến để lưu trữ giới hạn tiến trình và phân tích tham số dòng lệnh
 	var procLimit int
@@ -73,11 +82,21 @@ func main() {
 		_ = cmd.Start()
 	})
 
+	// 3.5 Bảng kết nối mạng (Network Connection Table)
+	netConnTable := tview.NewTable().
+		SetBorders(false).
+		SetSelectable(true, false)
+	netConnTable.SetBorder(true).SetTitle(" 🔌 Network Connections ").SetTitleColor(tcell.ColorGreen)
+
 	// 4. Sắp xếp Layout (Chia theo hàng dọc)
+	bottomFlex := tview.NewFlex().
+		AddItem(procTable, 0, 1, true).
+		AddItem(netConnTable, 0, 1, true)
+
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(netView, 3, 1, false).     // netView chiếm cố định 3 dòng
 		AddItem(sysInfoView, 3, 1, false). // sysInfoView chiếm cố định 3 dòng
-		AddItem(procTable, 0, 1, true)     // procTable chiếm toàn bộ không gian còn lại
+		AddItem(bottomFlex, 0, 1, true)    // bottomFlex chiếm toàn bộ không gian còn lại
 
 	// 5. Goroutine chạy ngầm để lấy dữ liệu liên tục
 	go func() {
@@ -95,35 +114,33 @@ func main() {
 		for range ticker.C {
 			// --- Xử lý hệ thống (CPU & RAM) ---
 			v, _ := mem.VirtualMemory()
-			// Lấy phần trăm sử dụng CPU tổng thể.
-			// Tham số đầu tiên `0` nghĩa là tính trung bình trên tất cả các CPU.
-			// Tham số thứ hai `false` nghĩa là không tính cho mỗi CPU riêng lẻ.
 			cpuPercentages, _ := cpu.Percent(0, false)
 			var cpuUsage float64
 			if len(cpuPercentages) > 0 {
 				cpuUsage = cpuPercentages[0]
 			}
 
-			// --- Xử lý Mạng ---
+			// --- Xử lý Mạng (Tổng quan) ---
 			currentNetStats, _ := net.IOCounters(false)
 			var dlSpeed, ulSpeed float64
 			if len(currentNetStats) > 0 {
 				dlSpeed = float64(currentNetStats[0].BytesRecv-prevRecv) / 1024 / 2 // KB/s
 				ulSpeed = float64(currentNetStats[0].BytesSent-prevSent) / 1024 / 2
-
 				prevRecv = currentNetStats[0].BytesRecv
 				prevSent = currentNetStats[0].BytesSent
 			}
 
-			// --- Xử lý Tiến trình ---
+			// --- Xử lý Tiến trình và tạo map PID -> Tên ---
 			processes, _ := process.Processes()
 			var procList []ProcessInfo
 			var totalProcCPU float64
+			pidToName := make(map[int32]string)
 
 			for _, p := range processes {
 				name, _ := p.Name()
+				pidToName[p.Pid] = name
 				memPercent, _ := p.MemoryPercent()
-				cpuPercent, _ := p.CPUPercent() // Lấy giá trị tức thời
+				cpuPercent, _ := p.CPUPercent()
 
 				if memPercent > 0.1 || cpuPercent > 0.1 {
 					procList = append(procList, ProcessInfo{
@@ -141,7 +158,53 @@ func main() {
 				return procList[i].Mem > procList[j].Mem
 			})
 
-			// --- Cập nhật Giao diện (Quan trọng: phải đưa vào QueueUpdateDraw để an toàn luồng) ---
+			// --- Xử lý Kết nối mạng (Chi tiết) ---
+			var connList []ConnInfo
+			connections, _ := net.Connections("inet")
+			for _, conn := range connections {
+				// Bỏ qua các kết nối không liên quan
+				if conn.Status == "LISTEN" || conn.Status == "NONE" || conn.Pid == 0 || len(conn.Raddr.IP) == 0 {
+					continue
+				}
+				// Bỏ qua các kết nối localhost
+				if conn.Raddr.IP == "127.0.0.1" || conn.Raddr.IP == "::1" {
+					continue
+				}
+
+				procName, ok := pidToName[conn.Pid]
+				if !ok {
+					procName = "N/A"
+				}
+
+				localAddr := fmt.Sprintf("%s:%d", conn.Laddr.IP, conn.Laddr.Port)
+				remoteAddr := fmt.Sprintf("%s:%d", conn.Raddr.IP, conn.Raddr.Port)
+
+				connList = append(connList, ConnInfo{
+					PID:         conn.Pid,
+					ProcessName: procName,
+					LocalAddr:   localAddr,
+					RemoteAddr:  remoteAddr,
+					Status:      conn.Status,
+				})
+			}
+
+			// Sắp xếp danh sách kết nối: ESTABLISHED lên đầu, sau đó theo tên tiến trình
+			sort.Slice(connList, func(i, j int) bool {
+				// Ưu tiên trạng thái "ESTABLISHED"
+				iEst := connList[i].Status == "ESTABLISHED"
+				jEst := connList[j].Status == "ESTABLISHED"
+				if iEst != jEst {
+					return iEst // true (ESTABLISHED) sẽ được đưa lên đầu
+				}
+				// Sắp xếp theo tên tiến trình
+				if connList[i].ProcessName != connList[j].ProcessName {
+					return connList[i].ProcessName < connList[j].ProcessName
+				}
+				// Cuối cùng, sắp xếp theo PID để ổn định
+				return connList[i].PID < connList[j].PID
+			})
+
+			// --- Cập nhật Giao diện ---
 			app.QueueUpdateDraw(func() {
 				// Update Text thông tin hệ thống
 				sysInfoText := fmt.Sprintf(
@@ -162,35 +225,44 @@ func main() {
 
 				// Update Bảng Tiến trình
 				procTable.Clear()
-
-				// Tiêu đề cột
 				headers := []string{"PID", "TÊN TIẾN TRÌNH", "CPU (%)", "RAM (%) / MB"}
 				for c, header := range headers {
-					cell := tview.NewTableCell(header).
-						SetTextColor(tcell.ColorYellow).
-						SetSelectable(false).
-						SetAlign(tview.AlignLeft)
-					procTable.SetCell(0, c, cell)
+					procTable.SetCell(0, c, tview.NewTableCell(header).SetTextColor(tcell.ColorYellow).SetSelectable(false).SetAlign(tview.AlignLeft))
 				}
-
-				// Giới hạn hiển thị các tiến trình để tránh lag TUI
 				limit := procLimit
 				if len(procList) < limit {
 					limit = len(procList)
 				}
-
 				for r := 0; r < limit; r++ {
 					p := procList[r]
 					var relativeCPU float64
 					if totalProcCPU > 0 {
 						relativeCPU = (p.CPU / totalProcCPU) * cpuUsage
 					}
-
 					procTable.SetCell(r+1, 0, tview.NewTableCell(fmt.Sprintf("%d", p.PID)).SetTextColor(tcell.ColorWhite))
 					procTable.SetCell(r+1, 1, tview.NewTableCell(p.Name).SetTextColor(tcell.ColorGreen))
 					procTable.SetCell(r+1, 2, tview.NewTableCell(fmt.Sprintf("%.2f", relativeCPU)).SetTextColor(tcell.ColorWhite))
 					ramUsedMB := (float64(p.Mem) / 100.0) * (float64(v.Total) / (1024 * 1024))
 					procTable.SetCell(r+1, 3, tview.NewTableCell(fmt.Sprintf("%.2f%% / %.2fMB", p.Mem, ramUsedMB)).SetTextColor(tcell.ColorWhite))
+				}
+
+				// Update Bảng Kết nối mạng
+				netConnTable.Clear()
+				connHeaders := []string{"PID", "PROCESS", "LOCAL ADDR", "REMOTE ADDR", "STATUS"}
+				for c, header := range connHeaders {
+					netConnTable.SetCell(0, c, tview.NewTableCell(header).SetTextColor(tcell.ColorYellow).SetSelectable(false).SetAlign(tview.AlignLeft))
+				}
+				connLimit := 50
+				if len(connList) < connLimit {
+					connLimit = len(connList)
+				}
+				for r := 0; r < connLimit; r++ {
+					cInfo := connList[r]
+					netConnTable.SetCell(r+1, 0, tview.NewTableCell(fmt.Sprintf("%d", cInfo.PID)).SetTextColor(tcell.ColorWhite))
+					netConnTable.SetCell(r+1, 1, tview.NewTableCell(cInfo.ProcessName).SetTextColor(tcell.ColorGreen))
+					netConnTable.SetCell(r+1, 2, tview.NewTableCell(cInfo.LocalAddr).SetTextColor(tcell.ColorWhite))
+					netConnTable.SetCell(r+1, 3, tview.NewTableCell(cInfo.RemoteAddr).SetTextColor(tcell.ColorWhite))
+					netConnTable.SetCell(r+1, 4, tview.NewTableCell(cInfo.Status).SetTextColor(tcell.ColorCadetBlue))
 				}
 			})
 		}

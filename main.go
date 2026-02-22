@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -23,6 +24,11 @@ type ProcessInfo struct {
 }
 
 func main() {
+	// Khởi tạo biến để lưu trữ giới hạn tiến trình và phân tích tham số dòng lệnh
+	var procLimit int
+	flag.IntVar(&procLimit, "limit", 100, "Số lượng tiến trình tối đa hiển thị trong bảng")
+	flag.Parse()
+
 	// Khởi tạo ứng dụng TUI
 	app := tview.NewApplication()
 
@@ -167,8 +173,8 @@ func main() {
 					procTable.SetCell(0, c, cell)
 				}
 
-				// Giới hạn hiển thị 20 tiến trình đầu tiên để tránh lag TUI
-				limit := 100
+				// Giới hạn hiển thị các tiến trình để tránh lag TUI
+				limit := procLimit
 				if len(procList) < limit {
 					limit = len(procList)
 				}

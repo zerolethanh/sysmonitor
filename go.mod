@@ -1,4 +1,4 @@
-module sysmonitor
+module github.com/zerolethanh/sysmonitor
 
 go 1.26
 

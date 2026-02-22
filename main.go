@@ -3,9 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	net1 "net"
 	"os/exec"
 	"sort"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -14,6 +17,17 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
+)
+
+var (
+	// dnsCache stores IP -> domain name mappings.
+	dnsCache = struct {
+		sync.RWMutex
+		m map[string]string
+	}{m: make(map[string]string)}
+
+	// lookupQueue is a channel for IPs that need DNS resolution.
+	lookupQueue = make(chan string, 256)
 )
 
 type ProcessInfo struct {
@@ -32,7 +46,28 @@ type ConnInfo struct {
 	Status      string
 }
 
+// dnsResolver performs reverse DNS lookups for IPs from the lookupQueue
+// and updates the cache.
+func dnsResolver() {
+	for ip := range lookupQueue {
+		names, err := net1.LookupAddr(ip)
+		var name string
+		if err != nil || len(names) == 0 {
+			// On failure or no result, cache the IP itself to prevent re-lookup.
+			name = ip
+		} else {
+			// Success, cache the first name, removing the trailing dot.
+			name = strings.TrimSuffix(names[0], ".")
+		}
+
+		dnsCache.Lock()
+		dnsCache.m[ip] = name
+		dnsCache.Unlock()
+	}
+}
+
 func main() {
+	go dnsResolver()
 	// Khởi tạo biến để lưu trữ giới hạn tiến trình và phân tích tham số dòng lệnh
 	var procLimit int
 	flag.IntVar(&procLimit, "limit", 100, "Số lượng tiến trình tối đa hiển thị trong bảng")
@@ -176,14 +211,39 @@ func main() {
 					procName = "N/A"
 				}
 
+				// --- Reverse DNS Lookup ---
+				remoteIP := conn.Raddr.IP
+				var remoteDisplay string
+
+				dnsCache.RLock()
+				name, found := dnsCache.m[remoteIP]
+				dnsCache.RUnlock()
+
+				if found {
+					remoteDisplay = name // Use cached name (or IP if lookup failed)
+				} else {
+					remoteDisplay = remoteIP // Use IP for now
+					// Add to queue for lookup, non-blocking.
+					// Put a placeholder in cache to prevent re-queueing.
+					dnsCache.Lock()
+					if _, exists := dnsCache.m[remoteIP]; !exists {
+						dnsCache.m[remoteIP] = remoteIP // Use IP as placeholder
+						select {
+						case lookupQueue <- remoteIP:
+						default: // a non-blocking send
+						}
+					}
+					dnsCache.Unlock()
+				}
+
 				localAddr := fmt.Sprintf("%s:%d", conn.Laddr.IP, conn.Laddr.Port)
-				remoteAddr := fmt.Sprintf("%s:%d", conn.Raddr.IP, conn.Raddr.Port)
+				remoteAddrWithPort := fmt.Sprintf("%s:%d", remoteDisplay, conn.Raddr.Port)
 
 				connList = append(connList, ConnInfo{
 					PID:         conn.Pid,
 					ProcessName: procName,
 					LocalAddr:   localAddr,
-					RemoteAddr:  remoteAddr,
+					RemoteAddr:  remoteAddrWithPort,
 					Status:      conn.Status,
 				})
 			}

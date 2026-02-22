@@ -38,7 +38,7 @@ func main() {
 		AddItem(sysInfoView, 3, 1, false).
 		AddItem(bottomFlex, 0, 1, true)
 
-	// Input capture for Tab and 'w' key
+	// Input capture
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
 			if procTable.HasFocus() {

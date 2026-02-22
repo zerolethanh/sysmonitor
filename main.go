@@ -7,6 +7,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
 )
@@ -22,25 +24,33 @@ func main() {
 	// Khởi tạo ứng dụng TUI
 	app := tview.NewApplication()
 
-	// 1. Khung hiển thị Mạng (Network View)
+	// 1. Khung hiển thị thông tin hệ thống (CPU & RAM)
+	sysInfoView := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft).
+		SetText("Đang thu thập dữ liệu hệ thống...")
+	sysInfoView.SetBorder(true).SetTitle(" 📊 System Info ").SetTitleColor(tcell.ColorGreen)
+
+	// 2. Khung hiển thị Mạng (Network View)
 	netView := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
 		SetText("Đang thu thập dữ liệu mạng...")
 	netView.SetBorder(true).SetTitle(" 🌐 Network I/O ").SetTitleColor(tcell.ColorGreen)
 
-	// 2. Bảng hiển thị Tiến trình (Process Table)
+	// 3. Bảng hiển thị Tiến trình (Process Table)
 	procTable := tview.NewTable().
 		SetBorders(false).
 		SetSelectable(true, false) // Cho phép dùng phím mũi tên lên/xuống để chọn dòng
 	procTable.SetBorder(true).SetTitle(" ⚙️ Top Processes (RAM) ").SetTitleColor(tcell.ColorCadetBlue)
 
-	// 3. Sắp xếp Layout (Chia theo hàng dọc)
+	// 4. Sắp xếp Layout (Chia theo hàng dọc)
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(netView, 3, 1, false). // netView chiếm cố định 3 dòng
-		AddItem(procTable, 0, 1, true) // procTable chiếm toàn bộ không gian còn lại
+		AddItem(netView, 3, 1, false).     // netView chiếm cố định 3 dòng
+		AddItem(sysInfoView, 3, 1, false). // sysInfoView chiếm cố định 3 dòng
+		AddItem(procTable, 0, 1, true)     // procTable chiếm toàn bộ không gian còn lại
 
-	// 4. Goroutine chạy ngầm để lấy dữ liệu liên tục
+	// 5. Goroutine chạy ngầm để lấy dữ liệu liên tục
 	go func() {
 		// Khởi tạo mốc mạng ban đầu
 		initialNetStats, _ := net.IOCounters(false)
@@ -54,6 +64,17 @@ func main() {
 		defer ticker.Stop()
 
 		for range ticker.C {
+			// --- Xử lý hệ thống (CPU & RAM) ---
+			v, _ := mem.VirtualMemory()
+			// Lấy phần trăm sử dụng CPU tổng thể.
+			// Tham số đầu tiên `0` nghĩa là tính trung bình trên tất cả các CPU.
+			// Tham số thứ hai `false` nghĩa là không tính cho mỗi CPU riêng lẻ.
+			cpuPercentages, _ := cpu.Percent(0, false)
+			var cpuUsage float64
+			if len(cpuPercentages) > 0 {
+				cpuUsage = cpuPercentages[0]
+			}
+
 			// --- Xử lý Mạng ---
 			currentNetStats, _ := net.IOCounters(false)
 			var dlSpeed, ulSpeed float64
@@ -91,6 +112,18 @@ func main() {
 
 			// --- Cập nhật Giao diện (Quan trọng: phải đưa vào QueueUpdateDraw để an toàn luồng) ---
 			app.QueueUpdateDraw(func() {
+				// Update Text thông tin hệ thống
+				sysInfoText := fmt.Sprintf(
+					"[yellow]CPU Usage: [white]%5.2f%%   [yellow]RAM (Used/Total): [white]%.2f/%.2f GiB (%5.2f%%)\n"+
+						"             [yellow]Available: [white]%.2f GiB",
+					cpuUsage,
+					float64(v.Used)/1024/1024/1024,
+					float64(v.Total)/1024/1024/1024,
+					v.UsedPercent,
+					float64(v.Available)/1024/1024/1024,
+				)
+				sysInfoView.SetText(sysInfoText)
+
 				// Update Text Mạng
 				timeStr := time.Now().Format("15:04:05")
 				netText := fmt.Sprintf("[yellow]Tải xuống (In):[white] %7.2f KB/s   |   [yellow]Tải lên (Out):[white] %7.2f KB/s   |   🕒 %s", dlSpeed, ulSpeed, timeStr)
@@ -127,7 +160,7 @@ func main() {
 		}
 	}()
 
-	// 5. Chạy ứng dụng TUI
+	// 6. Chạy ứng dụng TUI
 	if err := app.SetRoot(flex, true).Run(); err != nil {
 		panic(err)
 	}

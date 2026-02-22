@@ -156,8 +156,9 @@ func main() {
 		AddItem(sysInfoView, 3, 1, false). // sysInfoView chiếm cố định 3 dòng
 		AddItem(bottomFlex, 0, 1, true)    // bottomFlex chiếm toàn bộ không gian còn lại
 
-	// Xử lý sự kiện nhấn phím Tab để chuyển focus
+	// Xử lý sự kiện nhấn phím để chuyển focus hoặc thực thi hành động
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Chuyển focus bằng phím Tab
 		if event.Key() == tcell.KeyTab {
 			if procTable.HasFocus() {
 				app.SetFocus(netConnTable)
@@ -166,6 +167,24 @@ func main() {
 			}
 			return nil // Hủy sự kiện Tab mặc định
 		}
+
+		// Chạy `witr` cho tiến trình được chọn trong bảng network khi nhấn 'w'
+		if event.Rune() == 'w' {
+			if netConnTable.HasFocus() {
+				row, _ := netConnTable.GetSelection()
+				if row > 0 { // Bỏ qua dòng tiêu đề
+					pidStr := netConnTable.GetCell(row, 0).Text
+					pid, err := strconv.Atoi(pidStr)
+					if err == nil {
+						cmdString := fmt.Sprintf("tell app \"Terminal\" to do script \"witr --pid %d\"", pid)
+						cmd := exec.Command("osascript", "-e", cmdString)
+						_ = cmd.Start()
+					}
+				}
+				return nil // Hủy sự kiện 'w'
+			}
+		}
+
 		return event // Trả về sự kiện cho các xử lý khác
 	})
 

@@ -116,7 +116,7 @@ func fetchConnectionList(pidToName map[int32]string) ([]ConnInfo, error) {
 	}
 
 	for _, conn := range connections {
-		if conn.Status == "LISTEN" || conn.Status == "NONE" || conn.Pid == 0 || len(conn.Raddr.IP) == 0 || conn.Raddr.IP == "127.0.0.1" || conn.Raddr.IP == "::1" {
+		if conn.Status == "LISTEN" || conn.Status == "NONE" || conn.Pid == 0 || len(conn.Raddr.IP) == 0 /* || conn.Raddr.IP == "127.0.0.1" || conn.Raddr.IP == "::1"*/ {
 			continue
 		}
 

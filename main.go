@@ -135,7 +135,7 @@ func main() {
 				procTable.Clear()
 
 				// Tiêu đề cột
-				headers := []string{"PID", "TÊN TIẾN TRÌNH", "CPU (%)", "RAM (%)"}
+				headers := []string{"PID", "TÊN TIẾN TRÌNH", "CPU (%)", "RAM (%) / MB"}
 				for c, header := range headers {
 					cell := tview.NewTableCell(header).
 						SetTextColor(tcell.ColorYellow).
@@ -145,7 +145,7 @@ func main() {
 				}
 
 				// Giới hạn hiển thị 20 tiến trình đầu tiên để tránh lag TUI
-				limit := 20
+				limit := 100
 				if len(procList) < limit {
 					limit = len(procList)
 				}
@@ -160,7 +160,8 @@ func main() {
 					procTable.SetCell(r+1, 0, tview.NewTableCell(fmt.Sprintf("%d", p.PID)).SetTextColor(tcell.ColorWhite))
 					procTable.SetCell(r+1, 1, tview.NewTableCell(p.Name).SetTextColor(tcell.ColorGreen))
 					procTable.SetCell(r+1, 2, tview.NewTableCell(fmt.Sprintf("%.2f", relativeCPU)).SetTextColor(tcell.ColorWhite))
-					procTable.SetCell(r+1, 3, tview.NewTableCell(fmt.Sprintf("%.2f", p.Mem)).SetTextColor(tcell.ColorWhite))
+					ramUsedMB := (float64(p.Mem) / 100.0) * (float64(v.Total) / (1024 * 1024))
+					procTable.SetCell(r+1, 3, tview.NewTableCell(fmt.Sprintf("%.2f%% / %.2fMB", p.Mem, ramUsedMB)).SetTextColor(tcell.ColorWhite))
 				}
 			})
 		}

@@ -14,7 +14,7 @@ func createSysInfoView() *tview.TextView {
 	sysInfoView := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft).
-		SetText("Đang thu thập dữ liệu hệ thống...")
+		SetText("Collecting system data...")
 	sysInfoView.SetBorder(true).SetTitle(" 📊 System Info ").SetTitleColor(tcell.ColorGreen)
 	return sysInfoView
 }
@@ -24,7 +24,7 @@ func createNetView() *tview.TextView {
 	netView := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText("Đang thu thập dữ liệu mạng...")
+		SetText("Collecting network data...")
 	netView.SetBorder(true).SetTitle(" 🌐 Network I/O ").SetTitleColor(tcell.ColorGreen)
 	return netView
 }
@@ -64,14 +64,14 @@ func updateSysInfoView(view *tview.TextView, cpuUsage float64, v *mem.VirtualMem
 // updateNetView updates the network view with the latest data.
 func updateNetView(view *tview.TextView, dlSpeed, ulSpeed float64) {
 	timeStr := time.Now().Format("15:04:05")
-	netText := fmt.Sprintf("[yellow]Tải xuống (In):[white] %7.2f KB/s   |   [yellow]Tải lên (Out):[white] %7.2f KB/s   |   🕒 %s", dlSpeed, ulSpeed, timeStr)
+	netText := fmt.Sprintf("[yellow]Download (In):[white] %7.2f KB/s   |   [yellow]Upload (Out):[white] %7.2f KB/s   |   🕒 %s", dlSpeed, ulSpeed, timeStr)
 	view.SetText(netText)
 }
 
 // updateProcTable updates the process table with the latest data.
 func updateProcTable(table *tview.Table, procList []ProcessInfo, totalProcCPU, cpuUsage float64, v *mem.VirtualMemoryStat, limit int) {
 	table.Clear()
-	headers := []string{"PID", "TÊN TIẾN TRÌNH", "CPU (%)", "RAM (%) / MB"}
+	headers := []string{"PID", "PROCESS NAME", "CPU (%)", "RAM (%) / MB"}
 	for c, header := range headers {
 		table.SetCell(0, c, tview.NewTableCell(header).SetTextColor(tcell.ColorYellow).SetSelectable(false).SetAlign(tview.AlignLeft))
 	}

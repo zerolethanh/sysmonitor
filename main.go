@@ -17,7 +17,7 @@ import (
 func main() {
 	go dnsResolver()
 	var procLimit int
-	flag.IntVar(&procLimit, "limit", 100, "Số lượng tiến trình tối đa hiển thị trong bảng")
+	flag.IntVar(&procLimit, "limit", 100, "Maximum number of processes to display in the table")
 	flag.Parse()
 
 	app := tview.NewApplication()
@@ -124,14 +124,14 @@ func listenKeyForNetConnTable(event *tcell.EventKey, netConnTable *tview.Table) 
 			return nil
 		}
 	}
-	// Chạy `witr` cho tiến trình được chọn trong bảng network khi nhấn 'w'
+	// Run `witr` for the selected process in the network table when 'w' is pressed
 	if event.Rune() == 'w' {
 		pidStr := netConnTable.GetCell(focusedRow, 0).Text
 		pid, err := strconv.Atoi(pidStr)
 		if err == nil {
 			runWitr(pid)
 		}
-		return nil // Hủy sự kiện 'w'
+		return nil // Cancel the 'w' event
 	}
 
 	if event.Rune() == 'l' {
@@ -161,9 +161,8 @@ func runWitr(pid int) {
 	_ = cmd.Start()
 }
 
-// runWitr executes the 'witr' command for a given PID.
+// runOpen opens the given address in the default browser.
 func runOpen(address string) {
-	//cmdString := fmt.Sprintf("tell app \"Terminal\" to do script \"open %s\"", address)
 	is443 := strings.HasSuffix(address, ":443")
 	var protocol = "http"
 	if is443 {

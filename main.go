@@ -123,6 +123,29 @@ func main() {
 		SetSelectable(true, false)
 	netConnTable.SetBorder(true).SetTitle(" 🔌 Network Connections ").SetTitleColor(tcell.ColorGreen)
 
+	// Xử lý sự kiện khi nhấn Enter trên một dòng của bảng kết nối mạng
+	netConnTable.SetSelectedFunc(func(row int, column int) {
+		// Bỏ qua dòng tiêu đề
+		if row == 0 {
+			return
+		}
+		// Lấy địa chỉ Remote Addr từ cột thứ 4 (index 3)
+		remoteAddrWithPort := netConnTable.GetCell(row, 3).Text
+		// Tách địa chỉ IP/domain ra khỏi port
+		addr, _, err := net1.SplitHostPort(remoteAddrWithPort)
+		if err != nil {
+			// Nếu có lỗi (ví dụ không có port), dùng luôn chuỗi gốc
+			addr = remoteAddrWithPort
+		}
+
+		// Lệnh cho macOS để mở cửa sổ Terminal mới và chạy 'whois'
+		cmdString := fmt.Sprintf("tell app \"Terminal\" to do script \"whois %s\"", addr)
+		cmd := exec.Command("osascript", "-e", cmdString)
+
+		// Thực thi lệnh mà không chờ (fire-and-forget)
+		_ = cmd.Start()
+	})
+
 	// 4. Sắp xếp Layout (Chia theo hàng dọc)
 	bottomFlex := tview.NewFlex().
 		AddItem(procTable, 0, 1, true).
@@ -132,6 +155,19 @@ func main() {
 		AddItem(netView, 3, 1, false).     // netView chiếm cố định 3 dòng
 		AddItem(sysInfoView, 3, 1, false). // sysInfoView chiếm cố định 3 dòng
 		AddItem(bottomFlex, 0, 1, true)    // bottomFlex chiếm toàn bộ không gian còn lại
+
+	// Xử lý sự kiện nhấn phím Tab để chuyển focus
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			if procTable.HasFocus() {
+				app.SetFocus(netConnTable)
+			} else {
+				app.SetFocus(procTable)
+			}
+			return nil // Hủy sự kiện Tab mặc định
+		}
+		return event // Trả về sự kiện cho các xử lý khác
+	})
 
 	// 5. Goroutine chạy ngầm để lấy dữ liệu liên tục
 	go func() {

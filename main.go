@@ -89,6 +89,7 @@ func main() {
 			// --- Xử lý Tiến trình ---
 			processes, _ := process.Processes()
 			var procList []ProcessInfo
+			var totalProcCPU float64
 
 			for _, p := range processes {
 				name, _ := p.Name()
@@ -102,6 +103,7 @@ func main() {
 						CPU:  cpuPercent,
 						Mem:  memPercent,
 					})
+					totalProcCPU += cpuPercent
 				}
 			}
 
@@ -150,10 +152,14 @@ func main() {
 
 				for r := 0; r < limit; r++ {
 					p := procList[r]
+					var relativeCPU float64
+					if totalProcCPU > 0 {
+						relativeCPU = (p.CPU / totalProcCPU) * cpuUsage
+					}
 
 					procTable.SetCell(r+1, 0, tview.NewTableCell(fmt.Sprintf("%d", p.PID)).SetTextColor(tcell.ColorWhite))
 					procTable.SetCell(r+1, 1, tview.NewTableCell(p.Name).SetTextColor(tcell.ColorGreen))
-					procTable.SetCell(r+1, 2, tview.NewTableCell(fmt.Sprintf("%.2f", p.CPU)).SetTextColor(tcell.ColorWhite))
+					procTable.SetCell(r+1, 2, tview.NewTableCell(fmt.Sprintf("%.2f", relativeCPU)).SetTextColor(tcell.ColorWhite))
 					procTable.SetCell(r+1, 3, tview.NewTableCell(fmt.Sprintf("%.2f", p.Mem)).SetTextColor(tcell.ColorWhite))
 				}
 			})

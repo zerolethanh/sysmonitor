@@ -33,7 +33,7 @@ go install github.com/zerolethanh/sysmonitor@latest
 sysmonitor
 ```
 
-You can also specify the maximum number of processes to display:
+You can also specify the maximum number of processes to display (default 100):
 
 ```bash
 sysmonitor -limit 50

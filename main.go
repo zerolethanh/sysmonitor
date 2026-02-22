@@ -6,6 +6,7 @@ import (
 	net1 "net"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -26,27 +27,6 @@ func main() {
 	netView := createNetView()
 	procTable := createProcTable()
 	netConnTable := createNetConnTable()
-
-	// Setup event handlers
-	procTable.SetSelectedFunc(func(row int, column int) {
-		if row > 0 {
-			pidStr := procTable.GetCell(row, 0).Text
-			if pid, err := strconv.Atoi(pidStr); err == nil {
-				runWitr(pid)
-			}
-		}
-	})
-
-	netConnTable.SetSelectedFunc(func(row int, column int) {
-		if row > 0 {
-			remoteAddrWithPort := netConnTable.GetCell(row, 3).Text
-			addr, _, err := net1.SplitHostPort(remoteAddrWithPort)
-			if err != nil {
-				addr = remoteAddrWithPort
-			}
-			runWhois(addr)
-		}
-	})
 
 	// Layout setup
 	bottomFlex := tview.NewFlex().
@@ -69,32 +49,11 @@ func main() {
 			return nil
 		}
 
-		//if event.Rune() == 'w' && netConnTable.HasFocus() {
-		//	row, _ := netConnTable.GetSelection()
-		//	if row > 0 {
-		//		pidStr := netConnTable.GetCell(row, 0).Text
-		//		if pid, err := strconv.Atoi(pidStr); err == nil {
-		//			runWitr(pid)
-		//		}
-		//	}
-		//	return nil
-		//}
-
-		// Chạy `witr` cho tiến trình được chọn trong bảng network khi nhấn 'w'
-		if event.Rune() == 'w' {
-			if netConnTable.HasFocus() {
-				row, _ := netConnTable.GetSelection()
-				if row > 0 { // Bỏ qua dòng tiêu đề
-					pidStr := netConnTable.GetCell(row, 0).Text
-					pid, err := strconv.Atoi(pidStr)
-					if err == nil {
-						cmdString := fmt.Sprintf("tell app \"Terminal\" to do script \"witr --pid %d\"", pid)
-						cmd := exec.Command("osascript", "-e", cmdString)
-						_ = cmd.Start()
-					}
-				}
-				return nil // Hủy sự kiện 'w'
-			}
+		if netConnTable.HasFocus() {
+			return listenKeyForNetConnTable(event, netConnTable)
+		}
+		if procTable.HasFocus() {
+			return listenKeyForProcTable(event, procTable)
 		}
 
 		return event
@@ -133,10 +92,84 @@ func main() {
 	}
 }
 
+func listenKeyForProcTable(event *tcell.EventKey, procTable *tview.Table) *tcell.EventKey {
+	// Setup event handlers
+	procTable.SetSelectedFunc(func(row int, column int) {
+		if row > 0 {
+			pidStr := procTable.GetCell(row, 0).Text
+			if pid, err := strconv.Atoi(pidStr); err == nil {
+				runWitr(pid)
+			}
+		}
+	})
+	return event
+}
+
+func listenKeyForNetConnTable(event *tcell.EventKey, netConnTable *tview.Table) *tcell.EventKey {
+	netConnTable.SetSelectedFunc(func(row int, column int) {
+		if row > 0 {
+			remoteAddrWithPort := netConnTable.GetCell(row, 3).Text
+			addr, _, err := net1.SplitHostPort(remoteAddrWithPort)
+			if err != nil {
+				addr = remoteAddrWithPort
+			}
+			runWhois(addr)
+		}
+	})
+	var focusedRow int
+	if netConnTable.HasFocus() {
+		focusedRow, _ = netConnTable.GetSelection()
+		if focusedRow == 0 {
+			// skip title
+			return nil
+		}
+	}
+	// Chạy `witr` cho tiến trình được chọn trong bảng network khi nhấn 'w'
+	if event.Rune() == 'w' {
+		pidStr := netConnTable.GetCell(focusedRow, 0).Text
+		pid, err := strconv.Atoi(pidStr)
+		if err == nil {
+			runWitr(pid)
+		}
+		return nil // Hủy sự kiện 'w'
+	}
+
+	if event.Rune() == 'l' {
+		localAddress := netConnTable.GetCell(focusedRow, 2).Text
+		if localAddress != "" {
+			runOpen(localAddress)
+		}
+		return nil
+	}
+
+	if event.Rune() == 'r' {
+		removeAddress := netConnTable.GetCell(focusedRow, 3).Text
+		if removeAddress != "" {
+			runOpen(removeAddress)
+		}
+
+		return nil
+	}
+
+	return event
+}
+
 // runWitr executes the 'witr' command for a given PID.
 func runWitr(pid int) {
 	cmdString := fmt.Sprintf("tell app \"Terminal\" to do script \"witr --pid %d\"", pid)
 	cmd := exec.Command("osascript", "-e", cmdString)
+	_ = cmd.Start()
+}
+
+// runWitr executes the 'witr' command for a given PID.
+func runOpen(address string) {
+	//cmdString := fmt.Sprintf("tell app \"Terminal\" to do script \"open %s\"", address)
+	is443 := strings.HasSuffix(address, ":443")
+	var protocol = "http"
+	if is443 {
+		protocol = "https"
+	}
+	cmd := exec.Command("open", fmt.Sprintf("%s://%s", protocol, address))
 	_ = cmd.Start()
 }
 

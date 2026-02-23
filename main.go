@@ -102,6 +102,23 @@ func listenKeyForProcTable(event *tcell.EventKey, procTable *tview.Table) *tcell
 			}
 		}
 	})
+	var focusedRow int
+	if procTable.HasFocus() {
+		focusedRow, _ = procTable.GetSelection()
+		if focusedRow == 0 {
+			// skip title
+			return nil
+		}
+	}
+	// Run `witr` for the selected process in the network table when 'w' is pressed
+	if event.Rune() == 'w' {
+		pidStr := procTable.GetCell(focusedRow, 0).Text
+		pid, err := strconv.Atoi(pidStr)
+		if err == nil {
+			runWitr(pid)
+		}
+		return nil // Cancel the 'w' event
+	}
 	return event
 }
 
